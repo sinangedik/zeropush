@@ -11,15 +11,61 @@ import (
 	"strconv"
 )
 
+var (
+	BASE_URL = "https://api.zeropush.com"
+)
+
 type Client struct {
 	BaseURL   string
 	AuthToken string
 }
 
+type DeviceResponse struct {
+	*ZeroResponse
+	DeviceToken      string
+	Active           bool
+	MarkedInactiveAt string
+	Badge            int
+	Channels         []string
+}
+
+type NotifyResponse struct {
+	*ZeroResponse
+	SentCount          int
+	InactiveTokens     []string
+	UnregisteredTokens []string
+}
+type BroadcastResponse struct {
+	*ZeroResponse
+	SentCount int
+}
+
+type TokenDetail struct {
+	DeviceToken      string
+	MarkedInactiveAt string
+}
+
+//Responses
 type ZeroResponse struct {
 	Body    []map[string]interface{}
 	Headers map[string][]string
 	Error   map[string]string
+}
+type SuccessResponse struct {
+	*ZeroResponse
+	Message       string
+	AuthTokenType string
+}
+
+type TokenResponse struct {
+	*ZeroResponse
+	TokenDetails []TokenDetail
+}
+
+type SubscribeResponse struct {
+	*ZeroResponse
+	DeviceToken string
+	Channels    []string
 }
 
 func (zr *ZeroResponse) GetHeader(key string) string {
@@ -30,14 +76,13 @@ func (zr *ZeroResponse) GetHeader(key string) string {
 }
 
 func NewClient() *Client {
-	server_address := os.Getenv("BASE_URL")
 	var auth_token string
 	if os.Getenv("ENV") == "production" {
 		auth_token = os.Getenv("ZEROPUSH_PROD_TOKEN")
 	} else {
 		auth_token = os.Getenv("ZEROPUSH_DEV_TOKEN")
 	}
-	return &Client{BaseURL: server_address, AuthToken: auth_token}
+	return &Client{BaseURL: BASE_URL, AuthToken: auth_token}
 }
 
 func add_authorization(req *http.Request, auth_token string) error {
@@ -48,7 +93,7 @@ func add_authorization(req *http.Request, auth_token string) error {
 	return nil
 }
 
-func (c *Client) VerifyCredentials() (*ZeroResponse, error) {
+func (c *Client) VerifyCredentials() (*SuccessResponse, error) {
 	var req *http.Request
 	var err error
 	if req, err = http.NewRequest("GET", c.BaseURL+"/verify_credentials", nil); err != nil {
@@ -59,7 +104,15 @@ func (c *Client) VerifyCredentials() (*ZeroResponse, error) {
 		log.Printf("Error : %s", err)
 		return nil, err
 	}
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &SuccessResponse{ZeroResponse: response}, err
+	}
+	return &SuccessResponse{
+		ZeroResponse:  response,
+		Message:       response.Body[0]["message"].(string),
+		AuthTokenType: response.Body[0]["auth_token_type"].(string),
+	}, nil
 }
 
 func send_request(req *http.Request, expect_array bool) (*ZeroResponse, error) {
@@ -106,7 +159,7 @@ func send_request(req *http.Request, expect_array bool) (*ZeroResponse, error) {
 
 }
 
-func (c *Client) GetInactiveTokens() (*ZeroResponse, error) {
+func (c *Client) GetInactiveTokens() (*TokenResponse, error) {
 	var req *http.Request
 	var err error
 	if req, err = http.NewRequest("GET", c.BaseURL+"/inactive_tokens", nil); err != nil {
@@ -117,10 +170,23 @@ func (c *Client) GetInactiveTokens() (*ZeroResponse, error) {
 		log.Printf("Error : %s", err)
 		return nil, err
 	}
-	return send_request(req, true)
+	response, err := send_request(req, true)
+	if err != nil {
+		return &TokenResponse{ZeroResponse: response}, err
+	}
+	var token_details []TokenDetail = make([]TokenDetail, len(response.Body))
+	for i, token_detail := range response.Body {
+		token_details[i].DeviceToken = token_detail["device_token"].(string)
+		token_details[i].MarkedInactiveAt = token_detail["marked_inactive_at"].(string)
+	}
+	return &TokenResponse{
+		ZeroResponse: response,
+		TokenDetails: token_details,
+	}, nil
+
 }
 
-func (c *Client) GetDevice(device_token string) (*ZeroResponse, error) {
+func (c *Client) GetDevice(device_token string) (*DeviceResponse, error) {
 	var req *http.Request
 	var err error
 
@@ -136,9 +202,28 @@ func (c *Client) GetDevice(device_token string) (*ZeroResponse, error) {
 		log.Printf("Error : %s", err)
 		return nil, err
 	}
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &DeviceResponse{ZeroResponse: response}, err
+	}
+	var channels []string = make([]string, len(response.Body[0]["channels"].([]interface{})))
+	for i, channel := range response.Body[0]["channels"].([]interface{}) {
+		channels[i] = channel.(string)
+	}
+	marked_inactive_at := ""
+	if response.Body[0]["marked_inactive_at"] != nil {
+		marked_inactive_at = response.Body[0]["marked_inactive_at"].(string)
+	}
+	return &DeviceResponse{
+		ZeroResponse:     response,
+		DeviceToken:      response.Body[0]["token"].(string),
+		Active:           response.Body[0]["active"].(bool),
+		MarkedInactiveAt: marked_inactive_at,
+		Badge:            int(response.Body[0]["badge"].(float64)),
+		Channels:         channels,
+	}, nil
 }
-func (c *Client) register(device_token string, channel string, register bool) (*ZeroResponse, error) {
+func (c *Client) register(device_token string, channel string, register bool) (*SuccessResponse, error) {
 	var req *http.Request
 	var err error
 	data := url.Values{}
@@ -168,10 +253,17 @@ func (c *Client) register(device_token string, channel string, register bool) (*
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &SuccessResponse{ZeroResponse: response}, err
+	}
+	return &SuccessResponse{
+		ZeroResponse: response,
+		Message:      response.Body[0]["message"].(string),
+	}, nil
 }
 
-func (c *Client) SetBadge(device_token string, badge int) (*ZeroResponse, error) {
+func (c *Client) SetBadge(device_token string, badge int) (*SuccessResponse, error) {
 	var req *http.Request
 	var err error
 	data := url.Values{}
@@ -199,9 +291,16 @@ func (c *Client) SetBadge(device_token string, badge int) (*ZeroResponse, error)
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &SuccessResponse{ZeroResponse: response}, err
+	}
+	return &SuccessResponse{
+		ZeroResponse: response,
+		Message:      response.Body[0]["message"].(string),
+	}, nil
 }
-func (c *Client) Notify(alert string, badge string, sound string, info string, expiry string, content_available string, category string, device_tokens ...string) (*ZeroResponse, error) {
+func (c *Client) Notify(alert string, badge string, sound string, info string, expiry string, content_available string, category string, device_tokens ...string) (*NotifyResponse, error) {
 	var req *http.Request
 	var err error
 	if device_tokens == nil || len(device_tokens) == 0 {
@@ -247,10 +346,28 @@ func (c *Client) Notify(alert string, badge string, sound string, info string, e
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &NotifyResponse{ZeroResponse: response}, err
+	}
+	var inactive_tokens []string = make([]string, len(response.Body[0]["inactive_tokens"].([]interface{})))
+	for i, inactive_token := range response.Body[0]["inactive_tokens"].([]interface{}) {
+		inactive_tokens[i] = inactive_token.(string)
+	}
+	var unregistered_tokens []string = make([]string, len(response.Body[0]["unregistered_tokens"].([]interface{})))
+	for i, unregistered_token := range response.Body[0]["unregistered_tokens"].([]interface{}) {
+		unregistered_tokens[i] = unregistered_token.(string)
+	}
+	return &NotifyResponse{
+		ZeroResponse:       response,
+		InactiveTokens:     inactive_tokens,
+		UnregisteredTokens: unregistered_tokens,
+		SentCount:          int(response.Body[0]["sent_count"].(float64)),
+	}, nil
+
 }
 
-func (c *Client) Broadcast(channel string, alert string, badge string, sound string, info string, expiry string, content_available string, category string) (*ZeroResponse, error) {
+func (c *Client) Broadcast(channel string, alert string, badge string, sound string, info string, expiry string, content_available string, category string) (*BroadcastResponse, error) {
 	var req *http.Request
 	var err error
 
@@ -289,10 +406,17 @@ func (c *Client) Broadcast(channel string, alert string, badge string, sound str
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &BroadcastResponse{ZeroResponse: response}, err
+	}
+	return &BroadcastResponse{
+		ZeroResponse: response,
+		SentCount:    int(response.Body[0]["sent_count"].(float64)),
+	}, nil
 }
 
-func (c *Client) subscribe(device_token string, channel string, sub bool) (*ZeroResponse, error) {
+func (c *Client) subscribe(device_token string, channel string, sub bool) (*SubscribeResponse, error) {
 	var req *http.Request
 	var err error
 	data := url.Values{}
@@ -324,18 +448,31 @@ func (c *Client) subscribe(device_token string, channel string, sub bool) (*Zero
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	return send_request(req, false)
+	response, err := send_request(req, false)
+	if err != nil {
+		return &SubscribeResponse{ZeroResponse: response}, err
+	}
+	var channels []string = make([]string, len(response.Body[0]["channels"].([]interface{})))
+	for i, channel := range response.Body[0]["channels"].([]interface{}) {
+		channels[i] = channel.(string)
+	}
+	return &SubscribeResponse{
+		ZeroResponse: response,
+		DeviceToken:  response.Body[0]["device_token"].(string),
+		Channels:     channels,
+	}, nil
+
 }
 
-func (c *Client) Register(device_token string, channel string) (*ZeroResponse, error) {
+func (c *Client) Register(device_token string, channel string) (*SuccessResponse, error) {
 	return c.register(device_token, channel, true)
 }
-func (c *Client) Unregister(device_token string, channel string) (*ZeroResponse, error) {
+func (c *Client) Unregister(device_token string, channel string) (*SuccessResponse, error) {
 	return c.register(device_token, channel, false)
 }
-func (c *Client) Subscribe(device_token string, channel string) (*ZeroResponse, error) {
+func (c *Client) Subscribe(device_token string, channel string) (*SubscribeResponse, error) {
 	return c.subscribe(device_token, channel, true)
 }
-func (c *Client) Unsubscribe(device_token string, channel string) (*ZeroResponse, error) {
+func (c *Client) Unsubscribe(device_token string, channel string) (*SubscribeResponse, error) {
 	return c.subscribe(device_token, channel, false)
 }
