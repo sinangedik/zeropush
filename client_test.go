@@ -93,20 +93,12 @@ var _ = Describe("Client", func() {
 		Context("With no device token", func() {
 			client.AuthToken = testutil.CORRECT_AUTH_TOKEN
 			It("should fail to register the device", func() {
-				response, err := client.Register("", "")
+				_, err := client.Register("", "")
 				Expect(err).ShouldNot(BeNil())
-				Expect(response.Error["error"]).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota")).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota-Remaining")).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota-Overage")).ShouldNot(Equal(""))
 			})
 			It("should fail to unregister the device", func() {
-				response, err := client.Unregister("", "")
+				_, err := client.Unregister("", "")
 				Expect(err).ShouldNot(BeNil())
-				Expect(response.Error["error"]).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota")).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota-Remaining")).ShouldNot(Equal(""))
-				Expect(response.GetHeader("X-Device-Quota-Overage")).ShouldNot(Equal(""))
 			})
 		})
 	})

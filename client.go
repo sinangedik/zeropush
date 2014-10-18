@@ -226,6 +226,10 @@ func (c *Client) GetDevice(device_token string) (*DeviceResponse, error) {
 func (c *Client) register(device_token string, channel string, register bool) (*SuccessResponse, error) {
 	var req *http.Request
 	var err error
+	if device_token == "" {
+		return nil, errors.New("device_token cannot be blank")
+	}
+
 	data := url.Values{}
 	if device_token != "" {
 		data.Set("device_token", device_token)
