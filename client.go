@@ -326,6 +326,9 @@ func (c *Client) Notify(alert string, badge string, sound string, info string, e
 	if badge != "" {
 		data.Add("badge", badge)
 	}
+	if sound != "" {
+		data.Add("sound", sound)
+	}
 	if info != "" {
 		data.Add("info", info)
 	}
