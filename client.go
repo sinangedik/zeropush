@@ -335,6 +335,9 @@ func (c *Client) Notify(alert string, badge string, sound string, info string, e
 	if expiry != "" {
 		data.Add("expiry", expiry)
 	}
+	if category != "" {
+		data.Add("category", category)
+	}
 	if content_available != "" {
 		data.Add("content_available", content_available)
 	}
