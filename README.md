@@ -1,7 +1,7 @@
 zeropush
 ========
 [![GoDoc](http://godoc.org/github.com/sinangedik/zeropush?status.svg)](http://godoc.org/github.com/sinangedik/zeropush)
-![Build Status](https://travis-ci.org/sinangedik/zeropush.svg?branch=master)
+[![Build Status](https://travis-ci.org/sinangedik/zeropush.svg?branch=master)](https://travis-ci.org/sinangedik/zeropush)
 
 Go client for the ZeroPush API.
 
