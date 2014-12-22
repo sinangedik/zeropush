@@ -11,10 +11,6 @@ I used [Gomega](http://onsi.github.io/gomega/) and [Ginkgo](http://onsi.github.i
 
 USAGE
 ========
-Here is the GoDoc for the library:
-
-http://godoc.org/github.com/sinangedik/zeropush
-
 Example usage:
 
 First, set your API tokens as environment variables:
